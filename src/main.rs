@@ -10,7 +10,7 @@ enum TailMode {
 }
 
 fn main() -> Result<(), TailError> {
-    let mut f = File::open("./file.txt")?;
+    let mut f = File::open("./file-2.txt")?;
     let offset = find_offset(&mut f, TailMode::Lines(5))?;
 
 
@@ -30,7 +30,7 @@ fn find_offset(file: &mut File, mode: TailMode) -> Result<(), TailError> {
             let last_run = 512u64.min(eof) == eof;
             let pos = reader.seek(SeekFrom::End(-i * 512u64.min(eof) as i64));
             println!("position: {}", pos.unwrap());
-            reader.read_to_end(&mut buffer)?;
+            let bytes_read = reader.read_to_end(&mut buffer)?;
             let mut newlines = 0;
             let mut backward_position = 0;
             /*for item in &buffer2 {
@@ -43,7 +43,9 @@ fn find_offset(file: &mut File, mode: TailMode) -> Result<(), TailError> {
                     newlines = newlines + 1;
                 }
                 if newlines == l {
-                    io::stdout().write(&buffer.as_slice()[(eof as usize - backward_position)..])?;
+                    let range_start = bytes_read - backward_position;
+                    println!("range start: {}", range_start);
+                    io::stdout().write(&buffer.as_slice()[range_start..])?;
                     return Ok(())
                 }
             }
