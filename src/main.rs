@@ -11,7 +11,7 @@ enum TailMode {
 
 fn main() -> Result<(), TailError> {
     let mut f = File::open("./file-2.txt")?;
-    let offset = find_offset(&mut f, TailMode::Lines(5))?;
+    let offset = find_offset(&mut f, TailMode::Lines(100))?;
 
 
     return Ok(());
@@ -24,34 +24,52 @@ fn find_offset(file: &mut File, mode: TailMode) -> Result<(), TailError> {
             let mut i = 1i64;
             let mut buffer: Vec<u8> = Vec::new();
 
-
             let eof = reader.seek(SeekFrom::End(0)).unwrap();
             println!("EOF: {}", eof);
-            let last_run = 512u64.min(eof) == eof;
-            let pos = reader.seek(SeekFrom::End(-i * 512u64.min(eof) as i64));
-            println!("position: {}", pos.unwrap());
-            let bytes_read = reader.read_to_end(&mut buffer)?;
-            let mut newlines = 0;
-            let mut backward_position = 0;
-            /*for item in &buffer2 {
+            loop {
+                let seek_pos = (-i * 512).max(-(eof as i64));
+                //let seek_pos = eof - (i as u64 * 512u64);
+                let last_run = seek_pos == eof as i64;
+                println!("seek pos: {}", seek_pos);
+                let pos = reader.seek(SeekFrom::End((seek_pos)));
+                println!("position: {}", pos.unwrap());
+
+                let mut temp_buffer = [0; 512];
+
+                let bytes_read = reader.read(&mut temp_buffer)?;
+                buffer.splice(0..0, temp_buffer.iter().cloned());
+                println!("Bytes read: {}", bytes_read);
+
+                println!("=== Writing buffer:");
+                io::stdout().write(&buffer);
+
+                let mut newlines = 0;
+                let mut backward_position = 0;
+                /*for item in &buffer2 {
                 println!("Item: {item}");
             }*/
-            for single_byte in buffer.iter().rev() {
-                backward_position = backward_position + 1;
-                if *single_byte == '\n' as u8 {
-                    //println!("Single byte: {}", *single_byte as char);
-                    newlines = newlines + 1;
+                for single_byte in buffer.iter().rev() {
+                    backward_position = backward_position + 1;
+                    if *single_byte == '\n' as u8 {
+                        //println!("Single byte: {}", *single_byte as char);
+                        newlines = newlines + 1;
+                    }
+                    if newlines == l {
+                        let range_start = bytes_read - backward_position;
+                        println!("range start: {}", range_start);
+                        io::stdout().write(&buffer.as_slice()[range_start..])?;
+                        return Ok(())
+                    }
                 }
-                if newlines == l {
-                    let range_start = bytes_read - backward_position;
-                    println!("range start: {}", range_start);
-                    io::stdout().write(&buffer.as_slice()[range_start..])?;
+                if last_run {
+                    io::stdout().write(&buffer.as_slice())?;
                     return Ok(())
                 }
+                i = i + 1;
             }
-            println!("Newlines: {newlines}");
+            /*println!("Newlines: {newlines}");
 
-            Ok(())
+            Ok(())*/
         }
         TailMode::Bytes(b) => {
             file.seek(SeekFrom::End(-b))?;
