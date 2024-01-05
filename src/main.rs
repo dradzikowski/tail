@@ -1,98 +1,47 @@
 use std::fs::File;
-use std::io;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::io::BufReader;
+use std::io::{Read, Seek, Write};
 use std::io::prelude::*;
 
-enum TailMode {
+use crate::error::Error;
+
+mod error;
+
+enum Mode {
     Lines(i64),
     Bytes(i64),
 }
 
-fn main() -> Result<(), TailError> {
-    let mut f = File::open("./file-2.txt")?;
-    let offset = find_offset(&mut f, TailMode::Lines(100))?;
-
-
+fn main() -> Result<(), Error> {
     return Ok(());
 }
 
-fn find_offset(file: &mut File, mode: TailMode) -> Result<(), TailError> {
+fn tail<T: Write>(file: &mut File, mode: Mode, output: &mut T) -> Result<(), Error> {
     match mode {
-        TailMode::Lines(l) => {
-            let mut reader = BufReader::new(file);
-            let mut i = 1i64;
-            let mut buffer: Vec<u8> = Vec::new();
-
-            let eof = reader.seek(SeekFrom::End(0)).unwrap();
-            println!("EOF: {}", eof);
-            loop {
-                let seek_pos = (-i * 512).max(-(eof as i64));
-                //let seek_pos = eof - (i as u64 * 512u64);
-                let last_run = seek_pos == eof as i64;
-                println!("seek pos: {}", seek_pos);
-                let pos = reader.seek(SeekFrom::End((seek_pos)));
-                println!("position: {}", pos.unwrap());
-
-                let mut temp_buffer = [0; 512];
-
-                let bytes_read = reader.read(&mut temp_buffer)?;
-                buffer.splice(0..0, temp_buffer.iter().cloned());
-                println!("Bytes read: {}", bytes_read);
-
-                println!("=== Writing buffer:");
-                io::stdout().write(&buffer);
-
-                let mut newlines = 0;
-                let mut backward_position = 0;
-                /*for item in &buffer2 {
-                println!("Item: {item}");
-            }*/
-                for single_byte in buffer.iter().rev() {
-                    backward_position = backward_position + 1;
-                    if *single_byte == '\n' as u8 {
-                        //println!("Single byte: {}", *single_byte as char);
-                        newlines = newlines + 1;
-                    }
-                    if newlines == l {
-                        let range_start = bytes_read - backward_position;
-                        println!("range start: {}", range_start);
-                        io::stdout().write(&buffer.as_slice()[range_start..])?;
-                        return Ok(())
-                    }
-                }
-                if last_run {
-                    io::stdout().write(&buffer.as_slice())?;
-                    return Ok(())
-                }
-                i = i + 1;
-            }
-            /*println!("Newlines: {newlines}");
-
-            Ok(())*/
+        Mode::Lines(count) => {
+            write!(output, "lines: {}", count).unwrap();
+            Ok(())
         }
-        TailMode::Bytes(b) => {
-            file.seek(SeekFrom::End(-b))?;
-            let mut buffer = [0; 512];
-
-            let bytes_read = file.read(&mut buffer)?;
-            let data = &buffer[..bytes_read];
-            io::stdout().write(data)?;
+        Mode::Bytes(count) => {
+            write!(output, "bytes: {}", count).unwrap();
             Ok(())
         }
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
 
-#[derive(Debug)]
-struct TailError {
-    msg: String,
-}
+    use crate::{Mode, tail};
 
-impl From<io::Error> for TailError {
-    fn from(io_error: io::Error) -> Self {
-        Self {
-            msg: io_error.to_string()
-        }
+    #[test]
+    fn tail_returns_back_mode_and_count() {
+        let mut file = File::open("./how-are-you.txt").unwrap();
+        let mut output: Vec<u8> = Vec::new();
+
+        let offset = tail(&mut file, Mode::Lines(2), &mut output).unwrap();
+
+        assert_eq!(offset, ());
+        assert_eq!(output, "lines: 2".as_bytes());
     }
 }
