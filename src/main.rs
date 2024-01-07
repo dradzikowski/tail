@@ -24,9 +24,10 @@ fn tail<T: Write>(file: &mut File, mode: Mode, output: &mut T) -> Result<(), Err
         }
         Mode::Bytes(count) => {
             let size = file.metadata()?.len();
-            file.seek(SeekFrom::End(-(cmp::min(count, size as usize) as i64)))?;
-            let mut buffer: Vec<u8> = Vec::with_capacity(count);
+            let effective_count = cmp::min(count, size as usize);
+            file.seek(SeekFrom::End(-(effective_count as i64)))?;
 
+            let mut buffer: Vec<u8> = Vec::with_capacity(count);
             file.read_to_end(&mut buffer)?;
 
             let str = std::str::from_utf8(&buffer)?;
