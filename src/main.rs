@@ -169,7 +169,7 @@ mod tests {
         use crate::{Mode, tail};
 
         #[test]
-        fn output_empty_lines_when_file_ends_with_them() {
+        fn output_trailing_empty_line_when_file_ends_with_it() {
             let mut file = File::open("./how-are-you.txt").unwrap();
             let mut output: Vec<u8> = Vec::new();
 
@@ -177,6 +177,17 @@ mod tests {
 
             assert_eq!(result, ());
             assert_eq!(output, "\n".as_bytes());
+        }
+
+        #[test]
+        fn output_without_trailing_empty_line_when_it_is_missing() {
+            let mut file = File::open("./how-are-you-good.txt").unwrap();
+            let mut output: Vec<u8> = Vec::new();
+
+            let result = tail(&mut file, Mode::Lines(1), &mut output).unwrap();
+
+            assert_eq!(result, ());
+            assert_eq!(output, "Good!".as_bytes());
         }
 
         #[test]
