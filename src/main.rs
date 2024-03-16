@@ -39,7 +39,7 @@ fn tail<T: Write>(file: &mut File, mode: Mode, output: &mut T) -> Result<(), Err
             // where we are generally reading backwards
             let mut current_backward_position = 0;
 
-            while lines_count > lines_found {
+            while size > current_backward_position {
                 i = i + 1;
                 // how many bytes we need to move from the end to start reading in this iteration
                 let backward_start_position = cmp::min(i * FIXED_BUFFER_SIZE, size as i64);
@@ -57,26 +57,23 @@ fn tail<T: Write>(file: &mut File, mode: Mode, output: &mut T) -> Result<(), Err
                 let _ = reader.read(&mut buffer);
 
                 for &byte in buffer[..buffer_size as usize].iter().rev() {
-                    current_backward_position = current_backward_position + 1;
-                    if byte == b'\n' {
+                    if byte == b'\n' && current_backward_position != 0 {
                         lines_found = lines_found + 1;
                     }
                     if lines_found == lines_count {
-                        let mut buffer: Vec<u8> = Vec::with_capacity(current_backward_position as usize);
-                        reader.seek(SeekFrom::End(-current_backward_position))?;
-                        reader.read_to_end(&mut buffer)?;
-
-                        let str = std::str::from_utf8(&buffer)?;
+                        let str = read_string_from_end_position(&mut reader, current_backward_position)?;
                         write!(output, "{}", str)?;
 
                         return Ok(());
                     }
+                    current_backward_position = current_backward_position + 1;
                 }
             }
 
+            let str = read_string_from_end_position(&mut reader, current_backward_position)?;
+            write!(output, "{}", str)?;
 
-            write!(output, "lines: {}", lines_count).unwrap();
-            Ok(())
+            return Ok(());
         }
         Mode::Bytes(bytes_count) => {
             let size = file.metadata()?.len();
@@ -91,6 +88,15 @@ fn tail<T: Write>(file: &mut File, mode: Mode, output: &mut T) -> Result<(), Err
             Ok(())
         }
     }
+}
+
+fn read_string_from_end_position(reader: &mut BufReader<&mut File>, mut end_position: u64) -> Result<String, Error> {
+    let mut buffer: Vec<u8> = Vec::with_capacity(end_position as usize);
+    reader.seek(SeekFrom::End(-(end_position as i64)))?;
+    reader.read_to_end(&mut buffer)?;
+
+    let str = std::str::from_utf8(&buffer)?;
+    Ok(str.to_string())
 }
 
 #[cfg(test)]
@@ -158,6 +164,7 @@ mod tests {
 
     mod tail_lines {
         use std::fs::File;
+        use std::path::Path;
 
         use crate::{Mode, tail};
 
@@ -166,10 +173,10 @@ mod tests {
             let mut file = File::open("./how-are-you.txt").unwrap();
             let mut output: Vec<u8> = Vec::new();
 
-            let result = tail(&mut file, Mode::Lines(2), &mut output).unwrap();
+            let result = tail(&mut file, Mode::Lines(1), &mut output).unwrap();
 
             assert_eq!(result, ());
-            assert_eq!(output, "\n\n".as_bytes());
+            assert_eq!(output, "\n".as_bytes());
         }
 
         #[test]
@@ -177,7 +184,7 @@ mod tests {
             let mut file = File::open("./how-are-you.txt").unwrap();
             let mut output: Vec<u8> = Vec::new();
 
-            let result = tail(&mut file, Mode::Lines(4), &mut output).unwrap();
+            let result = tail(&mut file, Mode::Lines(3), &mut output).unwrap();
 
             assert_eq!(result, ());
             assert_eq!(output, "are\nyou?\n\n".as_bytes());
@@ -188,7 +195,7 @@ mod tests {
             let mut file = File::open("./how-are-you.txt").unwrap();
             let mut output: Vec<u8> = Vec::new();
 
-            let result = tail(&mut file, Mode::Lines(5), &mut output).unwrap();
+            let result = tail(&mut file, Mode::Lines(4), &mut output).unwrap();
 
             assert_eq!(result, ());
             assert_eq!(output, "How\nare\nyou?\n\n".as_bytes());
@@ -207,13 +214,37 @@ mod tests {
 
         #[test]
         fn output_requested_1k_lines_when_file_is_over_6_megabytes_size() {
-            let mut file = File::open("./large-file.txt").unwrap();
+            const LINES_COUNT: usize = 6;
+            let path = Path::new("./large-file.txt");
+            let last_lines = read_last_lines(path, LINES_COUNT);
+
+            let mut file = File::open(&path).unwrap();
             let mut output: Vec<u8> = Vec::new();
 
-            let result = tail(&mut file, Mode::Lines(1000), &mut output).unwrap();
+            let result = tail(&mut file, Mode::Lines(LINES_COUNT), &mut output).unwrap();
+            output = output.into_iter()
+                .filter(|b| *b != b'\n')
+                .collect();
 
             assert_eq!(result, ());
-            assert_eq!(output.len(), 1000);
+            assert_eq!(output, last_lines);
+        }
+
+        fn read_last_lines(path: &Path, count: usize) -> Vec<u8> {
+            let file_as_string = std::fs::read_to_string(path).unwrap();
+
+            let lines = file_as_string
+                .lines()
+                .rev()
+                .take(count)
+                .collect::<Vec<_>>();
+
+            lines
+                .iter()
+                .rev()
+                .map(|line| line.bytes())
+                .flatten()
+                .collect::<Vec<_>>()
         }
     }
 }
