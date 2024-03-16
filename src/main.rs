@@ -225,7 +225,7 @@ mod tests {
 
         #[test]
         fn output_requested_1k_lines_when_file_is_over_6_megabytes_size() {
-            const LINES_COUNT: usize = 6;
+            const LINES_COUNT: usize = 1000;
             let path = Path::new("./large-file.txt");
             let last_lines = read_last_lines(path, LINES_COUNT);
 
